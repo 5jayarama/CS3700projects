@@ -103,14 +103,13 @@ class Client:
                 self.sendMessage("guess", guessData)
                 #print the message we recieved(which will be retry or bye)
                 receivedMsg = self.receiveMessage()
-                print("Received ", receivedMsg)
                 # Process the retry message
                 if receivedMsg["type"] == "retry":
                     marks = receivedMsg["guesses"][-1]["marks"]
                     wordList = self.reduceWordList(wordList, guessWord, marks)
                 # if the guess was correct, print the secret flag(we need this for the assignment)
                 if receivedMsg["type"] == "bye":
-                    print("Secret Flag:", receivedMsg["flag"])
+                    print(receivedMsg["flag"])
                     break
         finally:
             #close the connection(important)
@@ -121,14 +120,11 @@ useEnc = False #default is no encryption
 hostname = "proj1.3700.network" #will get overwritten
 username = "jayaram.ad"
 
-print(hostname, port)
-
 if "-p" in sys.argv: #if -p given, set port to given port number
     port_index = sys.argv.index("-p") + 1
     port = int(sys.argv[port_index])
 
 if "-s" in sys.argv: #if -s given, use tls encryption
-    print("Using TLS encryption")
     useEnc = True
     port = 27994 #if -s and no specified port number
 
