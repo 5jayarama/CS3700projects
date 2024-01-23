@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+import socket
+import json
+import ssl
+import sys
+import random
+
+
+class Client:
+    #initailize the client server connection
+    def __init__(self, hostname, port, useEnc):
+        self.MSGLEN = 5
+        self.hostname = hostname
+        self.port = port
+        self.useEnc = useEnc
+        self.sock = self.makeConnection()
+
+    def makeConnection(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # create an INET, STREAMing socket
+        if self.useEnc: #encrypt socker with ssl
+            context = ssl.create_default_context()
+            sock = context.wrap_socket(sock, server_hostname=self.hostname)
+        sock.connect((self.hostname, self.port)) # Connect to server
+        return sock
+    
+    # def __init__(self, sock= None):
+    #     MSGLEN = 5
+    #     if sock is None:
+    #         self.sock = socket.socket(
+    #         socket.AF_INET, socket.SOCK_STREAM)
+    #     else:
+    #         self.sock = sock
+    #     self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # create an INET, STREAMing socket
+    #     if useEnc: #encrypt socker with ssl
+    #         context = ssl.create_default_context()
+    #         self.sock = context.wrap_socket(sock, server_hostname=hostname)
+    #     self.sock.connect((hostname, port)) # Connect to server
+
+    #send a messege to the server
+    def sendMessage(self, msgType, msgData):
+        message = {"type": msgType, **msgData}
+        dumps = json.dumps(message) + "\n"
+        self.sock.send(dumps.encode())
+
+    #recieve and decode a message from the server
+    def receiveMessage(self):
+        data = ""
+        while True:
+            char = self.sock.recv(1).decode()
+            if char == "\n":
+                break
+            data += char
+        return json.loads(data)
+        # chunks = []
+        # bytes_recd = 0
+        # while bytes_recd < self.MSGLEN:
+        #     chunk = self.sock.recv(min(self.MSGLEN - bytes_recd, 2048))
+        #     if chunk == b'':
+        #         raise RuntimeError("socket connection broken")
+        #     chunks.append(chunk)
+        #     bytes_recd = bytes_recd + len(chunk)
+        # return b''.join(chunks)
+    
+
+
+    #return a word list of the words from project1-words.txt"
+    def getWordList(self):
+        with open("project1-words.txt", "r") as file:
+            words = file.read().splitlines() #read file and split lines into seperate words
+        return words
+
+    #reduce word list based on feedback
+    def reduceWordList(self, wordList, guessWord, marks):
+        refined_list = []
+        for word in wordList:
+            if self.matchesMarks(word, guessWord, marks):
+                refined_list.append(word)
+        return refined_list
+    
+    #check if the word matches the marks fields from the retry response
+    def matchesMarks(self, word, guessWord, marks):
+        for i in range(len(word)):
+            if word[i] == guessWord[i] and marks[i] != 2:
+                return False
+            if word[i] != guessWord[i] and marks[i] == 2:
+                return False
+        return True
+    
+    #play the wordle game
+    def play_wordle(self, username):
+        wordList = self.getWordList()
+        try: #this is the actual game code
+            #send hello in this format to start the game
+            self.sendMessage("hello", {"northeastern_username": username})
+            #receive start message, which contains the game id(important for future messages)
+            startResponse = self.receiveMessage()
+            gameId = startResponse["id"]
+
+            while True: #continue till we guess correct word
+                guessWord = random.choice(wordList) #pick random choice from word list
+                #make guesses in this format
+                guessData = {"id": gameId, "word": guessWord}
+                self.sendMessage("guess", guessData)
+                #print the message we recieved(which will be retry or bye)
+                receivedMsg = self.receiveMessage()
+                print("Received ", receivedMsg)
+                # Process the retry message
+                if receivedMsg["type"] == "retry":
+                    marks = receivedMsg["guesses"][-1]["marks"]
+                    wordList = self.reduceWordList(wordList, guessWord, marks)
+                # if the guess was correct, print the secret flag(we need this for the assignment)
+                if receivedMsg["type"] == "bye":
+                    print("Secret Flag:", receivedMsg["flag"])
+                    break
+        finally:
+            #close the connection(important)
+            self.sock.close()
+
+port = 27993 #non-encryted requests on this port
+useEnc = False #default is no encryption
+hostname = "proj1.3700.network" #will get overwritten
+username = "jayaram.ad"
+
+print(hostname, port)
+
+if "-p" in sys.argv: #if -p given, set port to given port number
+    port_index = sys.argv.index("-p") + 1
+    port = int(sys.argv[port_index])
+
+if "-s" in sys.argv: #if -s given, use tls encryption
+    print("Using TLS encryption")
+    useEnc = True
+    port = 27994 #if -s and no specified port number
+
+hostname = sys.argv[-2]  #second-to-last argument is the hostname
+username = sys.argv[-1]  #last argument is the username
+
+client = Client(hostname, port, useEnc)
+client.play_wordle(username)
+
+#client executes using this command: ./client <-p port> <-s> <hostname> <Northeastern-username>
